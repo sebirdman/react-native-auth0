@@ -1,7 +1,6 @@
 
 #import "A0Auth0.h"
 
-#import <SafariServices/SafariServices.h>
 #import <CommonCrypto/CommonCrypto.h>
 
 #if __has_include("RCTUtils.h")
@@ -10,14 +9,12 @@
 #import <React/RCTUtils.h>
 #endif
 
-@interface A0Auth0 () <SFSafariViewControllerDelegate>
-@property (weak, nonatomic) SFSafariViewController *last;
+@interface A0Auth0 ()
 @property (copy, nonatomic) RCTResponseSenderBlock sessionCallback;
 @property (assign, nonatomic) BOOL closeOnLoad;
 @end
 
 @implementation A0Auth0
-
 - (dispatch_queue_t)methodQueue
 {
     return dispatch_get_main_queue();
@@ -26,7 +23,7 @@
 RCT_EXPORT_MODULE();
 
 RCT_EXPORT_METHOD(hide) {
-    [self terminateWithError:nil dismissing:YES animated:YES];
+    [self terminateWithError:nil];
 }
 
 RCT_EXPORT_METHOD(showUrl:(NSString *)urlString closeOnLoad:(BOOL)closeOnLoad callback:(RCTResponseSenderBlock)callback) {
@@ -46,28 +43,18 @@ RCT_EXPORT_METHOD(oauthParameters:(RCTResponseSenderBlock)callback) {
 #pragma mark - Internal methods
 
 - (void)presentSafariWithURL:(NSURL *)url {
-    UIWindow *window = [[UIApplication sharedApplication] keyWindow];
-    SFSafariViewController *controller = [[SFSafariViewController alloc] initWithURL:url];
-    controller.delegate = self;
-    [self terminateWithError:RCTMakeError(@"Only one Safari can be visible", nil, nil) dismissing:YES animated:NO];
-    [window.rootViewController presentViewController:controller animated:YES completion:nil];
-    self.last = controller;
+    BOOL opend = [RCTSharedApplication() openURL:url];
+    if (!opend) {
+        [self terminateWithError:RCTMakeError(@"Failed to open URL", nil, nil)];
+    }
 }
 
-- (void)terminateWithError:(id)error dismissing:(BOOL)dismissing animated:(BOOL)animated {
+- (void)terminateWithError:(id)error {
     RCTResponseSenderBlock callback = self.sessionCallback ? self.sessionCallback : ^void(NSArray *_unused) {};
-    if (dismissing) {
-        [self.last.presentingViewController dismissViewControllerAnimated:animated
-                                                               completion:^{
-                                                                   if (error) {
-                                                                       callback(@[error]);
-                                                                   }
-                                                               }];
-    } else if (error) {
+    if (error) {
         callback(@[error]);
     }
     self.sessionCallback = nil;
-    self.last = nil;
     self.closeOnLoad = NO;
 }
 
@@ -115,25 +102,4 @@ RCT_EXPORT_METHOD(oauthParameters:(RCTResponseSenderBlock)callback) {
              };
 }
 
-#pragma mark - SFSafariViewControllerDelegate
-
-- (void)safariViewControllerDidFinish:(SFSafariViewController *)controller {
-    NSDictionary *error = @{
-                            @"error": @"a0.session.user_cancelled",
-                            @"error_description": @"User cancelled the Auth"
-                            };
-    [self terminateWithError:error dismissing:NO animated:NO];
-}
-
-- (void)safariViewController:(SFSafariViewController *)controller didCompleteInitialLoad:(BOOL)didLoadSuccessfully {
-    if (self.closeOnLoad && didLoadSuccessfully) {
-        [self terminateWithError:[NSNull null] dismissing:YES animated:YES];
-    } else if (!didLoadSuccessfully) {
-        NSDictionary *error = @{
-                                @"error": @"a0.session.failed_load",
-                                @"error_description": @"Failed to load url"
-                                };
-        [self terminateWithError:error dismissing:YES animated:YES];
-    }
-}
 @end
